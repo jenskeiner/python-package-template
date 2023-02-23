@@ -1,0 +1,54 @@
+name: Publish Python distributions to PyPI
+
+on:
+  workflow_dispatch
+
+jobs:
+  build-and-publish:
+    name: Build and publish Python distributions to TestPyPI
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install poetry
+      run: pipx install poetry
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+        cache: 'poetry'
+    - name: Generate requirements.txt
+      run: poetry export -f requirements.txt --without-hashes > requirements.txt
+    - name: Build package
+      run: poetry build
+    - name: Publish distribution 📦 to Test PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        user: __token__
+        password: ${{ secrets.TEST_PYPI_PASSWORD }}
+        repository_url: https://test.pypi.org/legacy/
+        skip_existing: true
+    - name: Install from testpypi and import
+      run: |
+        i=0
+        while (($i<12)) && [ "<version>" != $(pip index versions -i https://test.pypi.org/simple --pre <package name> | cut -d'(' -f2 | cut -d')' -f1 | sed 1q) ];\
+          do echo waiting for package to appear in test index, sleeping 5s; sleep 5s; let i++; done
+        pip install --index-url https://test.pypi.org/simple <package name>==<version> --no-deps
+        pip install -r requirements.txt
+        python -c 'import <package name>;print("success")'
+    - name: Clean pip
+      run: |
+        pip uninstall -y <package name>
+        pip cache purge
+#    - name: Publish distribution 📦 to PyPI
+#      uses: pypa/gh-action-pypi-publish@release/v1
+#      with:
+#        user: __token__
+#        password: ${{ secrets.pypi_password }}
+#
+#    - name: Install and import
+#      run: |
+#        i=0
+#        while (($i<12)) && [ "${{ github.ref_name }}" != $(pip index versions -i https://pypi.org/simple --pre exchange_calendars | cut -d'(' -f2 | cut -d')' -f1 | sed 1q) ];\
+#          do echo waiting for package to appear in index, sleeping 5s; sleep 5s; let i++; done
+#        pip install --index-url https://pypi.org/simple exchange_calendars==${{ github.ref_name }}
+#        python -c 'import exchange_calendars;print(exchange_calendars.__version__)'
